@@ -8,12 +8,22 @@ const PORT = 3000;
 
 const WEAPONS = [
   'سكين', 'سم', 'حبل', 'فأس', 'مسدس', 'حقنة', 'وسادة', 'قنبلة', 'سيف', 'مقص',
-  'مطرقة', 'مفك', 'منشار', 'بندقية', 'عصا', 'قوس', 'سلك', 'مشرط', 'مجرفة', 'مخالب'
+  'مطرقة', 'مفك', 'منشار', 'بندقية', 'عصا', 'قوس', 'سلك', 'مشرط', 'مجرفة', 'مخالب',
+  'أحجار ثقيلة', 'غاز سام', 'شعلة نار', 'منفضة سجائر معدنية', 'كأس زجاج مكسور', 'قضيب حديدي',
+  'مذيب كيميائي', 'خنجر أثري', 'صاعق كهربائي', 'جرعة دواء زائدة', 'سماد زراعي قاتل', 'مبيد حشري',
+  'كابل كهربائي مكشوف', 'مفك براغي حاد', 'بندقية صيد', 'غبار الزرنيخ', 'شظية جليدية', 'زجاجة مكسورة',
+  'قنبلة يدوية', 'رماد بركاني', 'مطرقة حديدية رئيسية', 'حزام جلدي', 'مكيف هواء معطل', 'زناد بندقية قديمة',
+  'آلة حادة للقطع', 'أثقال جدارية'
 ];
 const CLUES = [
   'بقعة دم', 'شاش طبي', 'محفظة', 'ساعة مكسورة', 'عقب سيجارة', 'منديل', 'زر قميص',
   'خاتم', 'مفتاح', 'بطاقة شخصية', 'قلم', 'نظارة', 'رسالة', 'إيصال', 'صورة',
-  'كتاب', 'حذاء', 'قفاز', 'شعر', 'بصمة'
+  'كتاب', 'حذاء', 'قفاز', 'شعر', 'بصمة',
+  'بقعة زيت', 'خصلة شعر أشقر', 'رذاذ عطر', 'تراب طيني', 'رماد سيجارة', 'مصحح مائي مجفف',
+  'فنجان قهوة دافئ', 'مذكرة يومية مسكوبة', 'علبة دواء فارغة', 'قصاصة ظفر', 'مشبك ورق معدني',
+  'ألياف ملابس صوفية', 'أحمر شفاه', 'سماعة أذن وسخة', 'تذكرة قطار ملغية', 'خاتم زواج فضي',
+  'عقد مخرّز مكسور', 'فاتورة طبيب شرعي', 'ساعة يدوية متوقفة', 'قطرة عين دائرية', 'قطعة قماش حريرية',
+  'أوراق نقدية ممزقة', 'مظروف بريدي مفتوح', 'بقايا طعام معضوض', 'خيط خياطة ملون', 'سلسلة مفاتيح صدئة'
 ];
 
 const PEOPLES = [
@@ -671,8 +681,19 @@ async function startServer() {
         player.hasVoted = false;
 
         if (player.role !== 'Forensic') {
-          player.weapons = shuffledWeapons.slice(weaponIndex, weaponIndex + 4);
-          player.clues = shuffledClues.slice(clueIndex, clueIndex + 4);
+          // Robust wrap-around fallback to ensure players always receive exactly 4 weapons and 4 clues
+          let wSlice = shuffledWeapons.slice(weaponIndex, weaponIndex + 4);
+          if (wSlice.length < 4) {
+            const extraCount = 4 - wSlice.length;
+            wSlice = [...wSlice, ...shuffledWeapons.slice(0, extraCount)];
+          }
+          let cSlice = shuffledClues.slice(clueIndex, clueIndex + 4);
+          if (cSlice.length < 4) {
+            const extraCount = 4 - cSlice.length;
+            cSlice = [...cSlice, ...shuffledClues.slice(0, extraCount)];
+          }
+          player.weapons = wSlice;
+          player.clues = cSlice;
           weaponIndex += 4;
           clueIndex += 4;
         } else {

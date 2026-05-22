@@ -23,7 +23,9 @@ import {
   PlusCircle,
   RefreshCw,
   Volume2,
-  VolumeX
+  VolumeX,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audio } from './utils/audio';
@@ -109,6 +111,9 @@ export default function App() {
   const [room, setRoom] = useState<Room | null>(null);
   const [errorDetails, setErrorDetails] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [activeDayTab, setActiveDayTab] = useState<'scene' | 'council' | 'colleagues'>('scene');
+  const [activeForensicToast, setActiveForensicToast] = useState<{message: string; timestamp: number} | null>(null);
   
   // Game states local
   const [selectedWeapon, setSelectedWeapon] = useState<string>('');
@@ -122,6 +127,26 @@ export default function App() {
   const [gameOverResult, setGameOverResult] = useState<any>(null);
   const [activeAccusation, setActiveAccusation] = useState<any>(null);
   const lastVoteTimestampRef = useRef<number>(0);
+
+  // Auto-hide accusation notification banner after 6 seconds
+  useEffect(() => {
+    if (activeAccusation) {
+      const timer = setTimeout(() => {
+        setActiveAccusation(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeAccusation]);
+
+  // Auto-hide forensic hint notification toast after 5 seconds
+  useEffect(() => {
+    if (activeForensicToast) {
+      const timer = setTimeout(() => {
+        setActiveForensicToast(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeForensicToast]);
 
   const lastStatusRef = useRef<string | null>(null);
   const lastHintsCountRef = useRef<number>(0);
@@ -187,6 +212,14 @@ export default function App() {
       }
     }
 
+    // Capture the newest hint to display as a real-time toast banner for everyone
+    if (room.status === 'Day' && room.hints.length > lastHintsCountRef.current && lastStatusRef.current === 'Day') {
+      const newestHint = room.hints[room.hints.length - 1];
+      if (notificationsEnabled) {
+        setActiveForensicToast({ message: newestHint, timestamp: Date.now() });
+      }
+    }
+
     if (room.status === 'Lobby') {
       lastVoteTimestampRef.current = 0;
       setActiveAccusation(null);
@@ -194,7 +227,9 @@ export default function App() {
 
     if (room.lastVote && room.lastVote.timestamp > lastVoteTimestampRef.current) {
       lastVoteTimestampRef.current = room.lastVote.timestamp;
-      setActiveAccusation(room.lastVote);
+      if (notificationsEnabled) {
+        setActiveAccusation(room.lastVote);
+      }
       if (soundEnabled) {
         audio.playNightStart(); // Play dramatic deep gong
       }
@@ -202,7 +237,7 @@ export default function App() {
 
     lastStatusRef.current = room.status;
     lastHintsCountRef.current = room.hints.length;
-  }, [room, soundEnabled]);
+  }, [room, soundEnabled, notificationsEnabled]);
 
   // Audio trigger on game over
   useEffect(() => {
@@ -415,7 +450,7 @@ export default function App() {
 
       {/* Real-time Dramatic Vote Cast & Accusation Overlay */}
       <AnimatePresence mode="wait">
-        {activeAccusation && (
+        {activeAccusation && notificationsEnabled && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: -50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -491,6 +526,44 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Real-time Forensic Hint Toast Notification */}
+      <AnimatePresence>
+        {activeForensicToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -80, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+            className="fixed top-24 left-4 right-4 md:left-auto md:right-6 md:w-[450px] bg-[#171330]/95 border border-purple-550/50 p-4 rounded-2xl shadow-2xl z-50 text-right backdrop-blur-md"
+            dir="rtl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-purple-950/80 rounded-full border border-purple-400 flex items-center justify-center shrink-0">
+                <Flame className="w-5 h-5 text-purple-300 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-purple-300 font-sans">
+                    🚨 تلميح فوري من الطبيب الشرعي!
+                  </span>
+                  <button 
+                    onClick={() => setActiveForensicToast(null)} 
+                    className="w-10 h-10 -mr-2.5 -mt-2.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] active:bg-white/10 transition-colors focus:outline-none shrink-0"
+                    title="إغلاق التنبيه"
+                    aria-label="إغلاق"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-100 leading-relaxed font-sans font-extrabold pr-1">
+                  {activeForensicToast.message}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Nav Header */}
       <nav className="h-20 border-b border-white/10 bg-[#16161a] flex flex-col md:flex-row items-center justify-between px-6 py-4 md:py-0 shadow-xl relative z-20 gap-3">
         <div className="flex items-center space-x-4 space-x-reverse">
@@ -522,6 +595,29 @@ export default function App() {
               <>
                 <VolumeX className="w-3.5 h-3.5 text-slate-400" />
                 <span className="hidden sm:inline font-bold">الصوت: مكتوم 🔇</span>
+              </>
+            )}
+          </button>
+
+          {/* Toggle Accusation Notifications */}
+          <button 
+            type="button" 
+            onClick={() => {
+              if (soundEnabled) audio.playClick();
+              setNotificationsEnabled(!notificationsEnabled);
+            }}
+            className="p-2 border border-white/5 hover:border-white/15 bg-white/5 hover:bg-white/10 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs text-slate-300"
+            title={notificationsEnabled ? "إيقاف إشعارات الاتهامات" : "تشغيل إشعارات الاتهامات"}
+          >
+            {notificationsEnabled ? (
+              <>
+                <Bell className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline font-bold">الإشعارات: مفعّلة 🔔</span>
+              </>
+            ) : (
+              <>
+                <BellOff className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline font-bold">الإشعارات: معطلة 🔕</span>
               </>
             )}
           </button>
@@ -627,10 +723,17 @@ export default function App() {
           
           {/* Main Container */}
           <div className="space-y-6 flex-1">
-            
-            {/* LOBBY PHASE */}
-            {room.status === 'Lobby' && (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-6 py-12">
+            <AnimatePresence mode="wait">
+              {/* LOBBY PHASE */}
+              {room.status === 'Lobby' && (
+                <motion.div
+                  key="lobby"
+                  initial={{ opacity: 0, scale: 0.98, y: 30 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98, y: -30 }}
+                  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  className="h-full flex flex-col items-center justify-center text-center space-y-6 py-12"
+                >
                 <div className="p-6 bg-[#16161a] border border-white/10 rounded-2xl max-w-lg space-y-4 shadow-xl">
                   <div className="w-12 h-12 bg-indigo-900/30 rounded-full flex items-center justify-center border border-indigo-500/50 mx-auto">
                     <Users className="w-6 h-6 text-indigo-400" />
@@ -707,12 +810,19 @@ export default function App() {
                 {errorDetails && (
                   <p className="text-sm text-red-400 font-mono bg-red-950/20 border border-red-900/30 px-4 py-2 rounded-lg animate-pulse">{errorDetails}</p>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* NIGHT PHASE (Investigator state / sleeping town) */}
             {room.status === 'Night' && me?.role !== 'Killer' && (
-              <div className="min-h-[400px] flex flex-col items-center justify-center text-center space-y-4">
+              <motion.div
+                key="night-non-killer"
+                initial={{ opacity: 0, scale: 0.98, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, y: -30 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className="min-h-[400px] flex flex-col items-center justify-center text-center space-y-4"
+              >
                 <div className="w-16 h-16 bg-neutral-900 border border-white/10 rounded-full flex items-center justify-center shadow-inner">
                   <Skull className="w-8 h-8 text-slate-500 animate-pulse" />
                 </div>
@@ -723,12 +833,53 @@ export default function App() {
                 <div className="w-48 h-1 bg-[#16161a] rounded-full overflow-hidden mt-4">
                   <div className="h-full bg-red-600 w-1/2 rounded-full animate-infinite-loading"></div>
                 </div>
-              </div>
+
+                {me && me.role !== 'Forensic' && me.weapons && me.weapons.length > 0 && (
+                  <div className="mt-8 p-5 bg-[#121214]/80 border border-white/5 rounded-2xl w-full max-w-lg text-right space-y-4 shadow-xl">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#818cf8] block pb-2 border-b border-white/5 text-center">
+                      💼 حقيبتك الجنائية الشخصية (بطاقاتك السريّة)
+                    </span>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Weapons */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-red-500 tracking-wider block">الأدوات (اللون الأحمر) 🔪</span>
+                        <div className="space-y-1">
+                          {me.weapons.map(w => (
+                            <div key={w} className="px-3 py-1.5 bg-red-950/20 border border-red-500/20 text-red-100 text-xs rounded-lg font-bold text-center">
+                              {w}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Clues */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider block">الأدلة المادية (اللون الأزرق) 🔍</span>
+                        <div className="space-y-1">
+                          {me.clues.map(c => (
+                            <div key={c} className="px-3 py-1.5 bg-blue-950/20 border border-blue-500/20 text-blue-100 text-xs rounded-lg font-bold text-center">
+                              {c}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
             )}
 
             {/* KILLER ACTION IN NIGHT PHASE */}
             {room.status === 'Night' && me?.role === 'Killer' && (
-              <div className="bg-[#16161a] border border-red-900/40 ring-1 ring-red-500/10 p-6 rounded-2xl max-w-3xl mx-auto space-y-6 shadow-2xl relative overflow-hidden">
+              <motion.div
+                key="night-killer"
+                initial={{ opacity: 0, scale: 0.98, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, y: -30 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className="bg-[#16161a] border border-red-900/40 ring-1 ring-red-500/10 p-6 rounded-2xl max-w-3xl mx-auto space-y-6 shadow-2xl relative overflow-hidden"
+              >
                 <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-600"></div>
                 
                 <div className="flex items-center justify-between">
@@ -797,53 +948,80 @@ export default function App() {
                     تأكيد اختيار مسرح الجريمة
                   </button>
                 </div>
-              </div>
+              </motion.div>
             )}
 
             {/* DAY GAME BOARD & DISCUSSION */}
             {room.status === 'Day' && (
-              <div className="space-y-6">
+              <motion.div
+                key="day"
+                initial={{ opacity: 0, scale: 0.98, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, y: -30 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className="space-y-6"
+              >
+                {/* 3 Game Board Tabs */}
+                <div className="flex border border-white/5 bg-[#121215]/90 p-1 rounded-2xl gap-1 max-w-2xl mx-auto backdrop-blur-md shadow-2xl relative z-20">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) audio.playClick();
+                      setActiveDayTab('scene');
+                    }}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeDayTab === 'scene'
+                        ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300 font-extrabold shadow-[0_0_15px_rgba(147,51,234,0.1)]'
+                        : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-250 border border-transparent'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-purple-400" />
+                    <span>مسرح الجريمة 🧠</span>
+                  </button>
 
-                 {/* RE-ENGINEERED COMPREHENSIVE INTERACTIVE SCENE BOARD */}
-                 <div className="bg-[#121216] border border-purple-500/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden space-y-6">
-                   {/* Header */}
-                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-4">
-                     <div>
-                       <h3 className="text-xs uppercase tracking-widest text-purple-400 font-mono font-bold flex items-center gap-1.5 mb-1">
-                         <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
-                         مجلس ألواح وقرائن مسرح الجريمة 📋
-                       </h3>
-                       <p className="text-sm text-slate-300">
-                         اللوحات السداسية والقرائن الجنائية الرسمية لـ <span className="text-purple-300 font-bold">"كفاح هونغ كونغ الجنائي"</span>
-                       </p>
-                     </div>
-                     
-                     <div className="flex items-center gap-3 font-sans">
-                       <div className="text-xs bg-purple-950/40 border border-purple-500/30 px-3.5 py-1.5 rounded-full text-purple-300 font-bold">
-                         الجولة الحالية: {room.round} / 3 ⏳
-                       </div>
-                       
-                       {me?.role === 'Forensic' && room.round < 3 && (
-                         <button
-                           onClick={() => {
-                             if (soundEnabled) audio.playClick();
-                             socket.emit('nextRound', room.id);
-                           }}
-                           className="px-3.5 py-1.5 text-xs bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/50 text-purple-100 rounded-full font-bold cursor-pointer transition-all duration-300 shadow-md"
-                         >
-                           التقدم للجولة التالية ➡️
-                         </button>
-                       )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) audio.playClick();
+                      setActiveDayTab('council');
+                    }}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeDayTab === 'council'
+                        ? 'bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 font-extrabold shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                        : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-250 border border-transparent'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>مجلس الشورى ⚖️</span>
+                  </button>
 
-                       {me?.role === 'Forensic' && (
-                         <div className="text-xs bg-teal-950/40 border border-teal-500/30 px-3.5 py-1.5 rounded-full text-teal-300 font-bold">
-                           فرص التبديل المتبقية: {room.replacesLeft} 🔄
-                         </div>
-                       )}
-                     </div>
-                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) audio.playClick();
+                      setActiveDayTab('colleagues');
+                    }}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeDayTab === 'colleagues'
+                        ? 'bg-amber-600/20 border border-amber-500/30 text-amber-350 font-extrabold shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                        : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-250 border border-transparent'
+                    }`}
+                  >
+                    <Search className="w-3.5 h-3.5 text-amber-400" />
+                    <span>أدوات الزملاء 🎒</span>
+                  </button>
+                </div>
 
-                   {/* Tiles Grid representing the physical board plates */}
+                {activeDayTab === 'scene' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-6"
+                  >
+
+                    {/* Tiles Grid representing the physical board plates */}
                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
                      {room.tiles && room.tiles.map((tile) => {
                        const isCause = tile.type === 'CauseOfDeath';
@@ -937,8 +1115,17 @@ export default function App() {
                        );
                      })}
                    </div>
-                 </div>
+                </motion.div>
+                )}
 
+                {activeDayTab === 'council' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-6"
+                  >
                 {/* WITNESS ASSASSINATION CRITICAL PHASE PANEL */}
                 {room.witnessAssassinationActive && (
                   <div className="bg-red-950/30 border-2 border-red-500/80 rounded-2xl p-6 shadow-[0_0_30px_rgba(239,68,68,0.25)] relative overflow-hidden space-y-4 mb-6 text-right font-sans" dir="rtl">
@@ -1127,7 +1314,7 @@ export default function App() {
                 </div>
 
                 {/* Sub-actions based on role */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="max-w-2xl mx-auto">
 
                   {/* FORENSIC PANEL (Exclusive inputs to give premium hints instantly) */}
                   {me?.role === 'Forensic' && (
@@ -1135,6 +1322,12 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <Flame className="w-5 h-5 text-indigo-400" />
                         <h4 className="font-extrabold text-indigo-300">مختبر الطبيب الشرعي 🔬</h4>
+                      </div>
+
+                      <div className="p-3.5 bg-indigo-950/40 border border-indigo-500/20 rounded-xl text-right">
+                        <p className="text-[11px] text-indigo-300 leading-relaxed font-sans">
+                          💡 <strong>توضيح الأدوار السريّة:</strong> بصفتك الطبيب الشرعي وموجه الجريمة، ليست لديك أدوات أو أدلة خاصة بك. عملك يتركز بالكامل على لوحات مسرح الجريمة لمساعدة المحققين في الكشف عن شبكة القاتل وشريكه.
+                        </p>
                       </div>
                       
                       <div className="bg-red-950/20 border border-red-900/40 p-3 rounded-xl text-center">
@@ -1412,11 +1605,32 @@ export default function App() {
                    )}
 
                   {/* Cards display list of other players */}
-                  <div className="lg:col-span-2 space-y-4">
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block pb-1 border-b border-white/5">أدلة الزملاء المعرّضة للشبّهة</span>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(Object.values(room.players) as Player[]).map(p => {
+                  </div>
+                </motion.div>
+                )}
+
+                {activeDayTab === 'colleagues' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-6"
+                  >
+                    {/* Cards display list of other players */}
+                    <div className="w-full space-y-4 bg-[#121216]/50 border border-orange-500/10 rounded-2xl p-6 shadow-2xl">
+                      <div className="border-b border-white/5 pb-3">
+                        <h3 className="text-sm uppercase tracking-widest text-orange-400 font-mono font-bold flex items-center gap-1.5 mb-1">
+                          <span className="w-2.5 h-2.5 rounded-full bg-orange-505 animate-pulse"></span>
+                          أدلة الزملاء المعرّضة للشبّهة 🎒
+                        </h3>
+                        <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                          💡 <strong>توضيح تفاعلي:</strong> انقر مباشرة على الأدوات (اللون الأحمر) أو الأدلة المادية (اللون الأزرق) لنسخ المسمّى وتسهيل تعبئة لائحة الاتهام بسرعة في مجلس الشورى!
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                       {(Object.values(room.players) as Player[]).map(p => {
                         // Skip forensic scientist and current me if they don't want to show themselves (actually showing is okay but clean to skip forensic)
                         if (p.role === 'Forensic') return null;
 
@@ -1523,15 +1737,22 @@ export default function App() {
                       })}
                     </div>
                   </div>
+                </motion.div>
+                )}
 
-                </div>
-
-              </div>
+              </motion.div>
             )}
 
             {/* FINISHED / GAME OVER PHASE */}
             {room.status === 'Finished' && (
-              <div className="flex flex-col items-center justify-center text-center space-y-6 py-12 animate-fade-in relative z-10">
+              <motion.div
+                key="finished"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                className="flex flex-col items-center justify-center text-center space-y-6 py-12 relative z-10"
+              >
                 <div className="w-full max-w-2xl bg-[#16161a] border border-red-500/30 p-8 rounded-2xl shadow-[0_20px_50px_rgba(220,38,38,0.2)] space-y-6 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-yellow-500 to-indigo-600"></div>
                   
@@ -1623,8 +1844,9 @@ export default function App() {
                   </div>
 
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
 
           </div>
 
